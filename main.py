@@ -1,5 +1,6 @@
 import yfinance as yf
 
+
 PRICES = {}
 
 def get_price(symbol: str) -> float:
@@ -8,24 +9,15 @@ def get_price(symbol: str) -> float:
     else:
         stock = yf.Ticker(symbol)
         info = stock.get_info()
+        # Handle stocks
         if "currentPrice" in info:
             price = info["currentPrice"]
+        # Handle ETFs
         elif "regularMarketPrice" in info:
             price = info["regularMarketPrice"]
 
         PRICES[symbol] = price
         return price
-
-# def get_price_etf(symbol: str) -> float:
-#     if symbol in PRICES.keys():
-#         return PRICES[symbol]
-#     else:
-#         etf = yf.Ticker(symbol).get_info()
-#         for key, value in etf.items():
-#             print(f"{key}: {value}")
-#         price = etf.get_info()["regularMarketPrice"]
-#         PRICES[symbol] = price
-#         return price
 
 def get_current_portfolio() -> dict:
     portfolio = {}
