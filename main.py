@@ -7,9 +7,25 @@ def get_price(symbol: str) -> float:
         return PRICES[symbol]
     else:
         stock = yf.Ticker(symbol)
-        price = stock.get_info()["currentPrice"]
+        info = stock.get_info()
+        if "currentPrice" in info:
+            price = info["currentPrice"]
+        elif "regularMarketPrice" in info:
+            price = info["regularMarketPrice"]
+
         PRICES[symbol] = price
         return price
+
+# def get_price_etf(symbol: str) -> float:
+#     if symbol in PRICES.keys():
+#         return PRICES[symbol]
+#     else:
+#         etf = yf.Ticker(symbol).get_info()
+#         for key, value in etf.items():
+#             print(f"{key}: {value}")
+#         price = etf.get_info()["regularMarketPrice"]
+#         PRICES[symbol] = price
+#         return price
 
 def get_current_portfolio() -> dict:
     portfolio = {}
@@ -92,21 +108,28 @@ def print_portfolio(portfolio: dict, total_value: float):
 
 def get_desired_portfolio(portfolio: dict) -> dict:
     desired_portfolio = {}
-    print("\nNow enter the desired allocation for each stock in percent.")
+    valid_total = False
+    while not valid_total:
+        print("\nNow enter the desired allocation for each stock in percent.")
 
-    for key in portfolio.keys():
-        valid_percent = False
-        while not valid_percent:
-            percent = input(f"For {key}: ")
-            try:
-                percent = float(percent)
-                if percent < 0 or percent > 100:
+        for key in portfolio.keys():
+            valid_percent = False
+            while not valid_percent:
+                percent = input(f"For {key}: ")
+                try:
+                    percent = float(percent)
+                    if percent < 0 or percent > 100:
+                        print("Invalid percentage.")
+                    else:
+                        valid_percent = True
+                except ValueError:
                     print("Invalid percentage.")
-                else:
-                    valid_percent = True
-            except ValueError:
-                print("Invalid percentage.")
-        desired_portfolio[key] = percent/100
+            desired_portfolio[key] = percent/100
+        
+        if sum(desired_portfolio.values()) != 1:
+            print("Those do not add up to 100%. Please Try again.")
+        else:
+            valid_total = True
     
     return desired_portfolio
 
@@ -180,8 +203,10 @@ def main():
     total_value = get_portfolio_value(portfolio) + cash
     
     # Print the complete portfolio
-    print("\nYour complete portfolio is:")
+    print("\nYour current portfolio is:")
     print_portfolio(portfolio, total_value)
+    print(f"Cash: ${cash:.2f}")
+    print(f"Total value: ${total_value:.2f}")
     
     # Now get the desired portfolio
     desired_portfolio = get_desired_portfolio(portfolio)
@@ -211,6 +236,7 @@ def main():
     print("\nYour new portfolio will be:")
     print_portfolio(new_portfolio, total_value)
     print(f"Cash: ${new_cash:.2f}")
+    print(f"Total value: ${total_value:.2f}")
 
 if __name__ == "__main__":
     main()
