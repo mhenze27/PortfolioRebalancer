@@ -5,8 +5,7 @@ PRICES = {}
 
 
 def get_price(symbol: str, currency, ne=False) -> float:
-    #print(f"PRICES: {PRICES}")
-
+    # Handle Canadian stocks and ETFs
     if currency == "CAD" and not ne:
         symbol = symbol + ".TO"
     if currency == "CAD" and ne:
@@ -245,33 +244,6 @@ def balance_currencies(cad_value, usd_value):
         rate = exchange_rate_selection()
 
         # Determine the total value of each account
-
-        # print("\nWhat is the total value of your $CAD account, in $CAD.")
-        # valid_cad_amount = False
-        # while not valid_cad_amount:
-        #     cad_value = input(">>> ")
-        #     try:
-        #         cad_value = float(cad_value)
-        #         if cad_value >= 0:
-        #             valid_cad_amount = True
-        #         else:
-        #             print("Invalid amount.")
-        #     except ValueError:
-        #         print("Invalid amount.")
-        
-        # print("What is the total value of your $USD account, in $USD?")
-        # valid_usd_value = False
-        # while not valid_usd_value:
-        #     usd_value = input(">>> ")
-        #     try:
-        #         usd_value = float(usd_value)
-        #         if usd_value >= 0:
-        #             valid_usd_value = True
-        #         else:
-        #             print("Invalid amount.")
-        #     except ValueError:
-        #         print("Invalid amount.")
-        
         print(f"\nThe total value of your $CAD account is ${cad_value:.2f}")
         print(f"The total value of your $USD account is ${usd_value:.2f}")
 
