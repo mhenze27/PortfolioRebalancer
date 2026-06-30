@@ -3,12 +3,19 @@ import yfinance as yf
 
 PRICES = {}
 
-def get_price(symbol: str, currency) -> float:
-    if currency == "CAD":
+
+def get_price(symbol: str, currency, ne=False) -> float:
+    #print(f"PRICES: {PRICES}")
+
+    if currency == "CAD" and not ne:
         symbol = symbol + ".TO"
+    if currency == "CAD" and ne:
+        symbol = symbol + ".NE"
 
     if symbol in PRICES.keys():
         return PRICES[symbol]
+    elif currency=="CAD" and symbol[:-3] in PRICES.keys():
+        return PRICES[symbol[:-3]]
     else:
         stock = yf.Ticker(symbol)
         info = stock.get_info()
@@ -21,11 +28,17 @@ def get_price(symbol: str, currency) -> float:
         else:
             return -1
 
-        PRICES[symbol] = price
+        if currency == "CAD":
+            PRICES[symbol[:-3]] = price
+        else:
+            PRICES[symbol] = price
         return price
 
 def get_current_portfolio(currency: str) -> dict:
     portfolio = {}
+
+    if currency == "CAD":
+        print("Note: A HTTP error message may display if some Canadian ETFs are found with the suffix .NE instead of .TO on Yahoo Finance. However everything is still working correctly.")
 
     complete = False
     while not complete:
@@ -50,10 +63,16 @@ def get_current_portfolio(currency: str) -> dict:
                     #print(f"The current price of {symbol} is ${price}.")
                     if price != -1:
                         valid_symbol = True
+                    elif price == -1 and currency=="CAD":
+                        price = get_price(symbol, currency, ne=True)
+                        if price != -1:
+                            valid_symbol = True
+                        else:
+                            print("Not a valid stock symbol. #2")
                     else:
-                        print("Not a valid stock symbol. #2")
+                        print("Not a valid stock symbol. #3")
                 except KeyError:
-                    print("Not a valid stock symbol. #3")
+                    print("Not a valid stock symbol. #4")
                 
         valid_shares = False
         while not valid_shares and not complete:
@@ -74,7 +93,7 @@ def get_current_portfolio(currency: str) -> dict:
         # Add the entry to the portfolio dictionary
         if symbol != "STOP":
             portfolio[symbol] = shares
-    
+                
     return portfolio
 
 def get_cash_balance() -> float:
@@ -222,35 +241,36 @@ def exchange_rate_selection() -> float:
 
     return rate
 
-def balance_currencies():
+def balance_currencies(cad_value, usd_value):
         rate = exchange_rate_selection()
 
         # Determine the total value of each account
-        print("\nWhat is the total value of your $CAD account, in $CAD.")
-        valid_cad_amount = False
-        while not valid_cad_amount:
-            cad_value = input(">>> ")
-            try:
-                cad_value = float(cad_value)
-                if cad_value >= 0:
-                    valid_cad_amount = True
-                else:
-                    print("Invalid amount.")
-            except ValueError:
-                print("Invalid amount.")
+
+        # print("\nWhat is the total value of your $CAD account, in $CAD.")
+        # valid_cad_amount = False
+        # while not valid_cad_amount:
+        #     cad_value = input(">>> ")
+        #     try:
+        #         cad_value = float(cad_value)
+        #         if cad_value >= 0:
+        #             valid_cad_amount = True
+        #         else:
+        #             print("Invalid amount.")
+        #     except ValueError:
+        #         print("Invalid amount.")
         
-        print("What is the total value of your $USD account, in $USD?")
-        valid_usd_value = False
-        while not valid_usd_value:
-            usd_value = input(">>> ")
-            try:
-                usd_value = float(usd_value)
-                if usd_value >= 0:
-                    valid_usd_value = True
-                else:
-                    print("Invalid amount.")
-            except ValueError:
-                print("Invalid amount.")
+        # print("What is the total value of your $USD account, in $USD?")
+        # valid_usd_value = False
+        # while not valid_usd_value:
+        #     usd_value = input(">>> ")
+        #     try:
+        #         usd_value = float(usd_value)
+        #         if usd_value >= 0:
+        #             valid_usd_value = True
+        #         else:
+        #             print("Invalid amount.")
+        #     except ValueError:
+        #         print("Invalid amount.")
         
         print(f"\nThe total value of your $CAD account is ${cad_value:.2f}")
         print(f"The total value of your $USD account is ${usd_value:.2f}")
@@ -293,13 +313,44 @@ def balance_currencies():
         if current_usd_split < usd_split and (ideal_usd_amount - usd_value) > 5:
             to_usd_adjustment = ideal_usd_amount - usd_value
             print(f"\nYou need to transfer enough $CAD to buy ${to_usd_adjustment:.2f} USD.")
+            overweight_currency = "CAD"
+            return overweight_currency, to_usd_adjustment, rate
         elif current_usd_split > usd_split and (usd_value - ideal_usd_amount) > 5:
             to_cad_adjustment = usd_value - ideal_usd_amount
             print(f"\nYou need to transfer ${to_cad_adjustment:.2f} USD to $CAD.")
+            overweight_currency = "USD"
+            return overweight_currency, to_cad_adjustment, rate
         else:
             print("\nYour accounts are perfectly balanced in terms of currency.")
+            return None, None, rate
 
-def main_calculation_loop(currency: str):
+def ignore_stocks(portfolio: dict) -> dict:
+        print("\nWhat stocks do you want to ignore. Enter the stocks then enter STOP when you are done.")
+        to_ignore = []
+
+        symbol = ""
+        while symbol != "STOP":
+            symbol = input("Enter a symbol: ")
+            if symbol.isalpha():
+                symbol = symbol.upper()
+                if symbol not in portfolio.keys() and symbol != "STOP":
+                    print("Invalid symbol. #1")
+                elif symbol in to_ignore:
+                    print("Invalid symbol. #2")
+                elif symbol in portfolio.keys():
+                    to_ignore.append(symbol)
+            else:
+                print("Invalid symbol. #3")
+        
+        print(f"We will ignore the following symbols in the rebalancing: {to_ignore}.")
+
+        # Remove the symbols from the portfolio
+        for symbol in to_ignore:
+            portfolio.pop(symbol)
+    
+        return portfolio
+
+def main_calculation_loop_part_1(currency: str):
     print("\nNow enter the stocks in your portfolio. When you are done type STOP.")
 
     # Get the users current portfolio
@@ -316,30 +367,120 @@ def main_calculation_loop(currency: str):
     print_portfolio(portfolio, total_value, currency)
     print(f"Cash: ${cash:.2f}")
     print(f"Total value: ${total_value:.2f}")
+
+    # Check if the user wants to ignore any stocks from the rebalance
+    # Determine if the use wants to ignore any stocks in the rebalance
+    print("\nDo you want to ignore any stocks?")
+    ignore_any = False
+    valid_answer = False
+    while not valid_answer:
+        answer = input(">>> ")
+        if answer.isalpha():
+            answer = answer.upper()
+            if answer == "YES" or answer == "Y":
+                ignore_any = True
+                valid_answer = True
+            elif answer == "NO" or answer == "N":
+                ignore_any = False
+                valid_answer = True
+            else:
+                print("Invalid answer.")
+        else:
+            print("Invalid answer.")
+    
+    if ignore_any:
+        portfolio = ignore_stocks(portfolio)
+    
+        # Get the adjusted portfolio value
+        total_value = get_portfolio_value(portfolio, currency) + cash
+
+        # Print the adjusted portfolio
+        print("\nYour adjusted current portfolio is:")
+        print_portfolio(portfolio, total_value, currency)
+        print(f"Cash: ${cash:.2f}")
+        print(f"Total adjusted value: ${total_value:.2f}")
+
+    return portfolio, cash
+
+def main_calculation_loop_part_2(currency: str, portfolio: dict, cash: float):
+    # Calculate the total value
+    total_value = get_portfolio_value(portfolio, currency) + cash
     
     # Now get the desired portfolio
     desired_portfolio = get_desired_portfolio(portfolio)
 
     print("\nYour desired asset allocation is:")
     for key, value in desired_portfolio.items():
-        print(f"{value*100}% - {key}")
+        print(f"{value*100:.2f}% - {key}")
     
+    # Check if the user wants to add a cash buffer
+    print("\nWould you like to include a cash buffer in your rebalance? (yes/no)")
+    add_buffer = False
+    valid_answer = False
+    while not valid_answer:
+        answer = input(">>> ")
+        if answer.isalpha():
+            answer = answer.upper()
+            if answer == "YES" or answer == "Y":
+                add_buffer = True
+                valid_answer = True
+                print("\nEnter a percent for the cash buffer. (0-100)")
+                valid_percent = False
+                if not valid_percent:
+                    buffer_percent = input(">>> ")
+                    try:
+                        buffer_percent = float(buffer_percent)
+                        if buffer_percent < 0 or buffer_percent > 100:
+                            print("Invalid percent")
+                        else:
+                            valid_percent = True
+                            print(f"We will add a cash buffer of {buffer_percent:.2f}%")
+                            buffer_percent /= 100
+                    except ValueError:
+                        print("Invalid percent.")
+            elif answer == "NO" or answer == "N":
+                valid_answer = True
+            else:
+                print("Invalid answer.")
+        else:
+            print("Invalid answer.")
+    
+    # Add a cash buffer if requested
+    if add_buffer:
+        buffer = total_value * buffer_percent
+        total_value = total_value - buffer
+
     # Rebalance the portfolio
     new_portfolio, portfolio_changes = rebalance_portfolio(portfolio, desired_portfolio, total_value, currency)
     new_cash = total_value - get_portfolio_value(new_portfolio, currency)
+
+    # If we added a buffer correct the cash value
+    if add_buffer:
+        new_cash = new_cash + buffer
+        total_value = get_portfolio_value(new_portfolio, currency) + new_cash
+
+    # Check if a rebalance is necessary
+    changes_necessary = False
+    for symbol, shares in portfolio_changes.items():
+        if shares != 0:
+            changes_necessary = True
     
     # Print out the necessary transactions to rebalance your portfolio
-    print("\nHere are the transaction you need to make to rebalance your portfolio.")
+    if changes_necessary:
+        print("\nHere are the transaction you need to make to rebalance your portfolio.")
 
-    print("\nTo sell:")
-    for symbol, shares in portfolio_changes.items():
-        if shares < 0:
-            print(f"{shares} shares of {symbol}")
-    
-    print("\nTo buy:")
-    for symbol, shares in portfolio_changes.items():
-        if shares > 0:
-            print(f"+{shares} shares of {symbol}")
+        print("\nTo sell:")
+        for symbol, shares in portfolio_changes.items():
+            if shares < 0:
+                print(f"{shares} shares of {symbol}")
+        
+        print("\nTo buy:")
+        for symbol, shares in portfolio_changes.items():
+            if shares > 0:
+                print(f"+{shares} shares of {symbol}")
+    else:
+        # There is no need to rebalance anything
+        print("\nYour portfolio is already perfectly balanced. There is no need to make any changes.")
     
     # Print out the new portfolio
     print("\nYour new portfolio will be:")
@@ -353,10 +494,78 @@ def main():
     # Select account type
     type = account_type_selection()
     
+    if type == 1:
+        # Run through the program for one $CAD portfolio
+        portfolio, cash = main_calculation_loop_part_1(currency="CAD")
+        main_calculation_loop_part_2(currency="CAD", portfolio=portfolio, cash=cash)
+        input("\nPress Enter to exit...")
+
+    elif type == 2:
+        # Run through the program for one $USD portfolio
+        portfolio, cash = main_calculation_loop_part_1(currency="USD")
+        main_calculation_loop_part_2(currency="USD", portfolio=portfolio, cash=cash)
+        input("\nPress Enter to exit...")
+
     # If the account is across currencies balance currencies
-    if type == 3:
-        # First balance currencies
-        balance_currencies()
+    else:
+        # Get the current $CAD portfolio first
+        print("\nEnter your current $CAD portfolio first.")
+        cad_portfolio, cad_cash = main_calculation_loop_part_1(currency="CAD")
+        cad_total_value = get_portfolio_value(cad_portfolio, currency="CAD") + cad_cash
+
+        # Get the current $USD portfolio next
+        print("\nNow enter your current $USD portfolio.")
+        usd_portfolio, usd_cash = main_calculation_loop_part_1(currency="USD")
+        usd_total_value = get_portfolio_value(usd_portfolio, currency="USD") + usd_cash
+
+        # Now ask if the user wants to balance currencies
+        print("\nDo you want to balance the currency split across your portfolios? (yes/no)")
+        balanced_currencies  = False
+        valid_answer = False
+        while not valid_answer:
+            answer = input(">>> ")
+            if answer.isalpha():
+                answer = answer.upper()
+                if answer in ["YES", "NO", "Y", "N"]:
+                    valid_answer = True
+                else:
+                    print("Invalid answer.")
+            else:
+                print("Invalid answer.")
+        if answer == "YES" or answer == "Y":
+            overweight_currency, adjustment, rate = balance_currencies(cad_total_value, usd_total_value)
+            balanced_currencies = True
+        else:
+            print("We will not balance currencies today.")
+        
+        # If we rebalanced currencies ask if we would want to use the newly calculated balances for our rebalance
+        recalculate_balances = False
+        if balanced_currencies and overweight_currency != None:
+            print("\nWould you like to use the newly calculated balances in your rebalances? (yes/no)")
+            valid_answer = False
+            while not valid_answer:
+                answer = input(">>> ")
+                if answer.isalpha():
+                    answer = answer.upper()
+                    if answer == "YES" or answer == "Y":
+                        recalculate_balances = True
+                        valid_answer = True
+                    elif answer == "NO" or answer == "N":
+                        valid_answer = True
+                    else:
+                        print("Invalid answer.")
+                else:
+                    print("Invalid answer.")
+        
+        if recalculate_balances:
+            if overweight_currency == "CAD":
+                # Calculate the new cash balances after transferring from $CAD to $USD
+                cad_cash = cad_cash - adjustment / rate
+                usd_cash = usd_cash + adjustment
+            else:
+                # Calculate the new cash balances after transferring from $USD to $CAD
+                cad_cash = cad_cash + adjustment * rate
+                usd_cash = usd_cash - adjustment
 
         # Then rebalance the two portfolios
         print("\nWhich portfolio would you like to rebalance first? (CAD or USD):")
@@ -374,22 +583,19 @@ def main():
         
         if selection == "CAD":
             print("\nWe will rebalance your $CAD portfolio first.")
-            main_calculation_loop(currency="CAD")
+            main_calculation_loop_part_2(currency="CAD", portfolio=cad_portfolio, cash=cad_cash)
             input("\nPress Enter to continue...")
             print("\nWe will rebalance your $USD portfolio next.")
-            main_calculation_loop(currency="USD")
+            main_calculation_loop_part_2(currency="USD", portfolio=usd_portfolio, cash=usd_cash)
+            input("\nPress Enter to exit...")
+
         else:
             print("\nWe will rebalance your $USD portfolio first.")
-            main_calculation_loop(currency="USD")
+            main_calculation_loop_part_2(currency="USD", portfolio=usd_portfolio, cash=usd_cash)
             input("\nPress Enter to continue...")
             print("\nWe will rebalance your $CAD portfolio next.")
-            main_calculation_loop(currency="CAD")
-    elif type == 1:
-        # Run through the program for one $CAD portfolio
-        main_calculation_loop(currency="CAD")
-    else:
-        # Run through the program for one $USD portfolio
-        main_calculation_loop(currency="USD")
+            main_calculation_loop_part_2(currency="CAD", portfolio=cad_portfolio, cash=cad_cash)
+            input("\nPress Enter to exit...")
 
 if __name__ == "__main__":
     main()
